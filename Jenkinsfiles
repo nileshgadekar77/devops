@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build & Test') {
+            parallel {
+
+                stage('Inventory') {
+                    steps {
+                        dir('inventry-service') {
+                            bat 'mvn clean test package'
+                        }
+                    }
+                }
+
+                stage('Order') {
+                    steps {
+                        dir('order-service') {
+                            bat 'mvn clean test package'
+                        }
+                    }
+                }
+
+                stage('Payment') {
+                    steps {
+                        dir('payment-service') {
+                            bat 'mvn clean test package'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                bat 'docker compose build'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI Pipeline completed successfully!'
+        }
+
+        failure {
+            echo 'CI Pipeline failed!'
+        }
+    }
+}
