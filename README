@@ -1,0 +1,4 @@
+here we are using jenkins file as a configuration in the jenkins
+we have to configure the git and docker hub creadeion inside the jenkins 
+
+Todo - read jenkins file form the git 
