@@ -3,8 +3,8 @@ package com.order;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class OrderServiceApplicationTests {
+@SpringBootTest(classes = InventryServiceApplicationTests.class)
+class InventryServiceApplicationTests {
 
 	@Test
 	void contextLoads() {
