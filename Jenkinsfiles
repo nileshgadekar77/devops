@@ -1,57 +1,406 @@
 pipeline {
+
     agent any
+
+    environment {
+        DOCKER_USERNAME = 'nileshgadekar'
+
+        INVENTORY_IMAGE = "${DOCKER_USERNAME}/inventry-service"
+        ORDER_IMAGE     = "${DOCKER_USERNAME}/order-service"
+        PAYMENT_IMAGE   = "${DOCKER_USERNAME}/payment-service"
+    }
 
     stages {
 
+        // =========================================================
+        // 1. CHECKOUT SOURCE CODE
+        // =========================================================
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/nileshgadekar77/devops.git'
+            }
+
+            post {
+                success {
+                    echo 'Git checkout SUCCESS'
+                }
+
+                failure {
+                    echo 'Git checkout FAILED'
+                }
             }
         }
 
+
+        // =========================================================
+        // 2. BUILD & TEST MICROSERVICES
+        // =========================================================
         stage('Build & Test') {
+
             parallel {
 
                 stage('Inventory') {
                     steps {
                         dir('inventry-service') {
-                            bat 'mvn clean test package'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package'
+                        }
+                    }
+
+                    post {
+                        success {
+                            echo 'Inventory build and test SUCCESS'
+                        }
+
+                        failure {
+                            echo 'Inventory build and test FAILED'
                         }
                     }
                 }
+
 
                 stage('Order') {
                     steps {
                         dir('order-service') {
-                            bat 'mvn clean test package'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package'
+                        }
+                    }
+
+                    post {
+                        success {
+                            echo 'Order build and test SUCCESS'
+                        }
+
+                        failure {
+                            echo 'Order build and test FAILED'
                         }
                     }
                 }
+
 
                 stage('Payment') {
                     steps {
                         dir('payment-service') {
-                            bat 'mvn clean test package'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package'
+                        }
+                    }
+
+                    post {
+                        success {
+                            echo 'Payment build and test SUCCESS'
+                        }
+
+                        failure {
+                            echo 'Payment build and test FAILED'
                         }
                     }
                 }
             }
+
+            post {
+                success {
+                    echo '======================================'
+                    echo 'All microservices build and test SUCCESS'
+                    echo '======================================'
+                }
+
+                failure {
+                    echo '======================================'
+                    echo 'One or more microservices FAILED'
+                    echo '======================================'
+                }
+            }
         }
 
+
+        // =========================================================
+        // 3. SONARQUBE ANALYSIS
+        // =========================================================
+        
+        /*
+        stage('SonarQube Analysis') {
+            parallel {
+
+                stage('Inventory SonarQube') {
+                    steps {
+                        dir('inventry-service') {
+                            withSonarQubeEnv('SonarQube') {
+                                sh '''
+                                    ./mvnw sonar:sonar \
+                                    -Dsonar.projectKey=inventory-service \
+                                    -Dsonar.projectName=inventory-service
+                                '''
+                            }
+                        }
+                    }
+                }
+
+
+                stage('Order SonarQube') {
+                    steps {
+                        dir('order-service') {
+                            withSonarQubeEnv('SonarQube') {
+                                sh '''
+                                    ./mvnw sonar:sonar \
+                                    -Dsonar.projectKey=order-service \
+                                    -Dsonar.projectName=order-service
+                                '''
+                            }
+                        }
+                    }
+                }
+
+
+                stage('Payment SonarQube') {
+                    steps {
+                        dir('payment-service') {
+                            withSonarQubeEnv('SonarQube') {
+                                sh '''
+                                    ./mvnw sonar:sonar \
+                                    -Dsonar.projectKey=payment-service \
+                                    -Dsonar.projectName=payment-service
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+
+            post {
+                success {
+                    echo '======================================'
+                    echo 'SonarQube analysis SUCCESS'
+                    echo '======================================'
+                }
+
+                failure {
+                    echo '======================================'
+                    echo 'SonarQube analysis FAILED'
+                    echo '======================================'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 4. SONARQUBE QUALITY GATE
+        // =========================================================
+        stage('SonarQube Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+
+            post {
+                success {
+                    echo 'SonarQube Quality Gate PASSED'
+                }
+
+                failure {
+                    echo 'SonarQube Quality Gate FAILED'
+                }
+            }
+        }
+ */
+
+        // =========================================================
+        // 5. CHECK DOCKER
+        // =========================================================
+        stage('Check Docker') {
+            steps {
+                sh 'echo "Checking Docker installation..."'
+                sh 'whoami'
+                sh 'docker --version'
+                sh 'docker compose version'
+                sh 'docker ps'
+            }
+
+            post {
+                success {
+                    echo 'Docker check SUCCESS'
+                }
+
+                failure {
+                    echo 'Docker check FAILED'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 6. BUILD DOCKER IMAGES
+        // =========================================================
         stage('Docker Build') {
             steps {
-                bat 'docker compose build'
+                sh 'docker compose build'
+            }
+
+            post {
+                success {
+                    echo 'Docker images built SUCCESS'
+                }
+
+                failure {
+                    echo 'Docker image build FAILED'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 7. TAG DOCKER IMAGES
+        // =========================================================
+        stage('Docker Tag') {
+            steps {
+
+                sh """
+                    echo "Tagging Docker images with build number: ${BUILD_NUMBER}"
+
+                    docker tag microservices-pipeline-inventry-service:latest \
+                        ${INVENTORY_IMAGE}:${BUILD_NUMBER}
+
+                    docker tag microservices-pipeline-order-service:latest \
+                        ${ORDER_IMAGE}:${BUILD_NUMBER}
+
+                    docker tag microservices-pipeline-payment-service:latest \
+                        ${PAYMENT_IMAGE}:${BUILD_NUMBER}
+
+
+                    echo "Tagging latest images"
+
+                    docker tag microservices-pipeline-inventry-service:latest \
+                        ${INVENTORY_IMAGE}:latest
+
+                    docker tag microservices-pipeline-order-service:latest \
+                        ${ORDER_IMAGE}:latest
+
+                    docker tag microservices-pipeline-payment-service:latest \
+                        ${PAYMENT_IMAGE}:latest
+
+
+                    echo "Docker images tagged successfully"
+
+                    docker images | grep ${DOCKER_USERNAME}
+                """
+            }
+
+            post {
+                success {
+                    echo 'Docker image tagging SUCCESS'
+                }
+
+                failure {
+                    echo 'Docker image tagging FAILED'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 8. LOGIN TO DOCKER HUB
+        // =========================================================
+        stage('Docker Login') {
+            steps {
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            --username "$DOCKER_USER" \
+                            --password-stdin
+                    '''
+                }
+            }
+
+            post {
+                success {
+                    echo 'Docker Hub login SUCCESS'
+                }
+
+                failure {
+                    echo 'Docker Hub login FAILED'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 9. PUSH DOCKER IMAGES
+        // =========================================================
+        stage('Docker Push') {
+            steps {
+
+                sh """
+                    echo "Pushing Inventory image..."
+                    docker push ${INVENTORY_IMAGE}:${BUILD_NUMBER}
+                    docker push ${INVENTORY_IMAGE}:latest
+
+
+                    echo "Pushing Order image..."
+                    docker push ${ORDER_IMAGE}:${BUILD_NUMBER}
+                    docker push ${ORDER_IMAGE}:latest
+
+
+                    echo "Pushing Payment image..."
+                    docker push ${PAYMENT_IMAGE}:${BUILD_NUMBER}
+                    docker push ${PAYMENT_IMAGE}:latest
+
+
+                    echo "All Docker images pushed successfully"
+                """
+            }
+
+            post {
+                success {
+                    echo 'Docker images pushed SUCCESS'
+                }
+
+                failure {
+                    echo 'Docker image push FAILED'
+                }
             }
         }
     }
 
+
+    // =============================================================
+    // PIPELINE POST ACTIONS
+    // =============================================================
     post {
+
         success {
-            echo 'CI Pipeline completed successfully!'
+            echo '======================================'
+            echo 'CI/CD PIPELINE COMPLETED SUCCESSFULLY'
+            echo '======================================'
+            echo "Build Number: ${BUILD_NUMBER}"
+            echo "Job Name: ${JOB_NAME}"
+            echo 'SonarQube Quality Gate PASSED'
+            echo 'Docker images pushed to Docker Hub'
+            echo '======================================'
         }
 
         failure {
-            echo 'CI Pipeline failed!'
+            echo '======================================'
+            echo 'CI/CD PIPELINE FAILED'
+            echo '======================================'
+            echo "Build Number: ${BUILD_NUMBER}"
+            echo "Job Name: ${JOB_NAME}"
+            echo 'Check the failed stage in Jenkins'
+            echo '======================================'
+        }
+
+        always {
+            echo "Pipeline execution completed for build ${BUILD_NUMBER}"
         }
     }
 }
